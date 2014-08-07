@@ -168,6 +168,30 @@ class SqlCompatibleTest extends CakeTestCase {
 	}
 
 /**
+ * testNOTIN method
+ *
+ * @return void
+ * @access public
+ */
+	public function testNOTIN() {
+		$expected = array(1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
+		$result = $this->Post->find('all', array(
+			'conditions' => array(
+				'title NOT IN' => array(10),
+			),
+			'fields' => array('_id', 'title', 'number'),
+			'order' => array('number' => 'ASC')
+		));
+		$result = Hash::extract($result, '{n}.Post.title');
+		$this->assertEqual($expected, $result);
+
+		$conditions = array(
+			'title' => array('$nin' => array(10))
+		);
+		$this->assertEqual($conditions, $this->Post->lastQuery['conditions']);
+	}
+
+/**
  * testGTLT method
  *
  * @return void
@@ -361,7 +385,36 @@ class SqlCompatibleTest extends CakeTestCase {
 		$this->assertEqual($expected, $result);
 	}
 
+/**
+ * Convert MongoDate objects to strings
+ *
+ * @return void
+ * @access public
+ */
+	public function testConvertDates() {
+		$expected = '2011-Nov-22 00:00:00';
+		$data = array('title' => 'date', 'created_at' => new MongoDate(strtotime('2011-11-22 00:00:00')));
+		$this->Post->save($data);
+		$result = $this->Post->read();
+		$this->assertEqual($expected, $result['Post']['created_at']);
+	}
 
+/**
+ * Convert MongoDate objects to another format strings
+ *
+ * @return void
+ * @access public
+ */
+	public function testConvertDatesAnotherFormat() {
+		$this->Post->Behaviors->detach('SqlCompatible');
+		$this->Post->Behaviors->attach('Mongodb.SqlCompatible', array('dateFormat' => 'Y-m-d H:i:s'));
+
+		$expected = '2011-11-22 00:00:00';
+		$data = array('title' => 'date', 'created_at' => new MongoDate(strtotime('2011-11-22 00:00:00')));
+		$this->Post->save($data);
+		$result = $this->Post->read();
+		$this->assertEqual($expected, $result['Post']['created_at']);
+	}
 
 /**
  * setupData method

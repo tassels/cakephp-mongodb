@@ -78,6 +78,28 @@ class Post extends AppModel {
 }
 
 /**
+ * Comment Model for the test
+ *
+ * @package       app
+ * @subpackage    app.model.post
+ */
+class Comment extends AppModel {
+
+	public $useDbConfig = 'test_mongo';
+
+	public $primaryKey = '_id';
+
+	public $mongoSchema = array(
+		'post_id' => array('type' => 'integer'),
+		'comment' => array('type' => 'string'),
+		'comment_at' => array('type' => 'datetime'),
+
+		'created' => array('type' => 'datetime'),
+		'modified' => array('type' => 'datetime'),
+	);
+}
+
+/**
  * MongoArticle class
  *
  * @uses          AppModel
@@ -542,6 +564,55 @@ class MongodbSourceTest extends CakeTestCase {
 		$this->assertEqual($expect, $result);
 	}
 
+/**
+ * Test truncate method
+ */
+	public function testTruncate() {
+		$this->insertData(array(
+			'title' => 'test',
+			'body' => 'aaaa',
+			'text' => 'bbbb',
+		));
+		$this->assertSame(1, $this->Post->find('count'));
+
+		$this->mongodb->truncate($this->Post);
+		$this->assertSame(0, $this->Post->find('count'));
+	}
+
+/**
+ * Test truncate method using mock
+ */
+	public function testTruncateStatement() {
+		$connection = $this->mongodb->connection;
+		$dbname = $this->mongodb->config['database'];
+		$tableName = $this->mongodb->fullTableName($this->Post);
+
+		$this->mongodb = $this->getMock(
+			'MongodbSource',
+			array('getMongoDb'),
+			array($this->_config)
+		);
+		$mongo = $this->getMock(
+			'MongoDB',
+			array('selectCollection'),
+			array($connection, $dbname)
+		);
+		$mongoCollection = $this->getMock(
+			'MongoCollection',
+			array('remove'),
+			array($mongo, $tableName)
+		);
+
+		// truncate method call MongoCollection::remove()
+		$mongoCollection->expects($this->once())->method('remove')
+			->with(array())->will($this->returnValue(true));
+		$mongo->expects($this->once())->method('selectCollection')
+			->with($tableName)->will($this->returnValue($mongoCollection));
+		$this->mongodb->expects($this->once())->method('getMongoDb')
+			->will($this->returnValue($mongo));
+
+		$this->mongodb->truncate($this->Post);
+	}
 
 /**
  * Tests find method.
@@ -1900,5 +1971,133 @@ class MongodbSourceTest extends CakeTestCase {
 			)
 		));
 		$this->assertTrue(is_array($return));
+	}
+
+	public function testDatetimeFieldUsingMongoDate() {
+		$this->Comment = ClassRegistry::init(array('class' => 'Comment', 'alias' => 'Comment', 'ds' => 'test_mongo'), true);
+		$ds = $this->Comment->getDataSource();
+
+		$fields = array(
+			'post_id',
+			'comment',
+			'comment_at',
+		);
+
+		$values = array(
+			array( 1, 'comment 1', '2014-02-21 01:02:03Z'),
+			array( 1, 'comment 2', '2014-02-22 01:02:03Z'),
+			array( 1, 'comment 3', '2014-02-23 01:02:03Z'),
+			array( 1, 'comment 4', '2014-02-24 01:02:03Z'),
+			array( 1, 'comment 5', '2014-02-25 01:02:03Z')
+		);
+
+		$ds->insertMulti('comments', $fields, $values);
+		$result = $this->Comment->find('all');
+		$this->assertEqual(count($result), 5);
+
+		$this->assertTrue(is_a($result[0]['Comment']['comment_at'], 'MongoDate'));
+		$this->assertTrue(is_a($result[1]['Comment']['comment_at'], 'MongoDate'));
+		$this->assertTrue(is_a($result[2]['Comment']['comment_at'], 'MongoDate'));
+		$this->assertTrue(is_a($result[3]['Comment']['comment_at'], 'MongoDate'));
+		$this->assertTrue(is_a($result[4]['Comment']['comment_at'], 'MongoDate'));
+
+		$values = array(
+			array( 2, 'comment 2 1', new MongoDate(strtotime('2014-02-21 02:02:01Z'))),
+		);
+
+		$ds->insertMulti('comments', $fields, $values);
+
+		$conditions = array('post_id' => 2);
+		$result = $this->Comment->find('all', array('conditions' => $conditions));
+		$this->assertEqual(count($result), 1);
+		$this->assertTrue(is_a($result[0]['Comment']['comment_at'], 'MongoDate'));
+
+		$data = array(
+			'Comment' => array(
+				'user_id' => 3,
+				'comment' => 'comment 3 1',
+				'comment_at' => new MongoDate(strtotime('2014-02-26 03:02:01Z')),
+			)
+		);
+
+		$this->Comment->create();
+		$result = $this->Comment->save($data);
+
+		$expected = array(
+			'Comment' => array(
+				'user_id' => 3,
+				'comment' => 'comment 3 1',
+				'comment_at' => new MongoDate(strtotime('2014-02-26 03:02:01Z')),
+				'created' => Hash::get($result, 'Comment.created'),
+				'modified' => Hash::get($result, 'Comment.modified'),
+				'_id' => Hash::get($result, 'Comment._id'),
+			)
+		);
+		$this->assertEquals($result, $expected);
+	}
+
+	public function testReadUsingHint() {
+		$index = array('count' => 1, 'created' => -1);
+		$this->Post->getDataSource()->ensureIndex($this->Post, $index);
+
+		$data = array(
+			array(
+				'title' => 'test1',
+				'body' => 'aaaa',
+				'text' => 'bbbb',
+				'count' => 3
+			),
+			array(
+				'title' => 'test2',
+				'body' => 'cccc',
+				'text' => 'dddd',
+				'count' => 4
+			),
+			array(
+				'title' => 'test1',
+				'body' => 'eeee',
+				'text' => 'ffff',
+				'count' => 5
+			),
+		);
+		foreach ($data as $set) {
+			$this->insertData($set);
+		}
+
+		$result = $this->Post->find('all', array(
+			'conditions' => array('count' => array('$gt' => 3)),
+			'hint' => $index,
+		));
+		$this->assertCount(2, $result);
+
+		$result = $this->Post->find('count', array(
+			'conditions' => array('count' => array('$gt' => 3)),
+			'hint' => $index,
+		));
+		$this->assertSame(2, $result);
+	}
+
+	public function testReadUsingHintThrowExceptionWhenNonExistsIndex() {
+		$index = array('count' => 1, 'created' => -1);
+		$this->Post->getDataSource()->ensureIndex($this->Post, $index);
+
+		$invalidIndex = array('count' => 1, 'created' => 1);
+		try {
+			$result = $this->Post->find('all', array(
+				'conditions' => array('count' => array('$gt' => 3)),
+				'hint' => $invalidIndex,
+			));
+		} catch (MongoCursorException $e) {
+			$this->assertTextContains('bad hint', $e->getMessage());
+		}
+
+		try {
+			$result = $this->Post->find('count', array(
+				'conditions' => array('count' => array('$gt' => 3)),
+				'hint' => $invalidIndex,
+			));
+		} catch (MongoCursorException $e) {
+			$this->assertTextContains('bad hint', $e->getMessage());
+		}
 	}
 }

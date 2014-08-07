@@ -1,11 +1,13 @@
 # mongoDB datasource for CakePHP
 
 [![Build Status](https://travis-ci.org/ichikaway/cakephp-mongodb.png?branch=cake2.2)](https://travis-ci.org/ichikaway/cakephp-mongodb)
+[![Coverage Status](https://coveralls.io/repos/ichikaway/cakephp-mongodb/badge.png?branch=cake2.2)](https://coveralls.io/r/ichikaway/cakephp-mongodb)
 
 ## Requirements
-PHP5, 
-CakePHP >= 2.2.5
-pecl mongo (http://php.net/mongo)
+
+- PHP5
+- CakePHP >= 2.2.5
+- pecl mongo (http://php.net/mongo)
 
 ## Installation
 
@@ -21,6 +23,11 @@ To install the driver for use in any/multiple application(s)
 	# where ROOT is the name of the directory parent to the base index.php of CakePHP.
 	cd ROOT/Plugin
 	git clone git://github.com/ichikaway/cakephp-mongodb.git Mongodb
+
+### composer
+This plugin on the Packagist.
+
+https://packagist.org/packages/ichikaway/cakephp-mongodb
 	
 ## Sample Code
 

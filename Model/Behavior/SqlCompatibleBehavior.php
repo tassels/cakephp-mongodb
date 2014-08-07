@@ -56,6 +56,7 @@ class SqlCompatibleBehavior extends ModelBehavior {
  */
 	protected $_defaultSettings = array(
 		'convertDates' => true,
+		'dateFormat' => 'Y-M-d H:i:s',
 		'operators' => array(
 			'!=' => '$ne',
 			'>' => '$gt',
@@ -91,9 +92,9 @@ class SqlCompatibleBehavior extends ModelBehavior {
  * @return void
  * @access public
  */
-	public function afterFind(Model $Model, $results, $primary) {
+	public function afterFind(Model $Model, $results, $primary = false) {
 		if ($this->settings[$Model->alias]['convertDates']) {
-			$this->convertDates($results);
+			$this->convertDates($this->settings[$Model->alias]['dateFormat'], $results);
 		}
 		return $results;
 	}
@@ -121,17 +122,18 @@ class SqlCompatibleBehavior extends ModelBehavior {
 /**
  * Convert MongoDate objects to strings for the purpose of view simplicity
  *
- * @param mixed $results
+ * @param string $format
+ * @param mixed  $results
  * @return void
  * @access protected
  */
-	protected function convertDates(&$results) {
+	protected function convertDates($format, &$results) {
 		if (is_array($results)) {
 			foreach($results as &$row) {
-				$this->convertDates($row);
+				$this->convertDates($format, $row);
 			}
 		} elseif (is_a($results, 'MongoDate')) {
-			$results = date('Y-M-d h:i:s', $results->sec);
+			$results = date($format, $results->sec);
 		}
 	}
 
@@ -171,9 +173,11 @@ class SqlCompatibleBehavior extends ModelBehavior {
 		$return = false;
 		foreach($conditions as $key => &$value) {
 			$uKey = strtoupper($key);
-			if (substr($uKey, -5) === 'NOT IN') {
+			if (substr($uKey, -6) === 'NOT IN') {
 				// 'Special' case because it has a space in it, and it's the whole key
-				$conditions[substr($key, 0, -5)]['$nin'] = $value;
+				$field = trim(substr($key, 0, -6));
+
+				$conditions[$field]['$nin'] = $value;
 				unset($conditions[$key]);
 				$return = true;
 				continue;
